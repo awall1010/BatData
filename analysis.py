@@ -1,8 +1,11 @@
+# schisto_eda_app.py
+
 import streamlit as st
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
+import io
 
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
@@ -70,6 +73,12 @@ def load_data(filepath):
     except Exception as e:
         st.sidebar.error(f"An unexpected error occurred: {e}")
         return None
+
+    # Drop any columns with 'Unnamed' in their name
+    unnamed_cols = [col for col in df.columns if 'Unnamed' in col]
+    if unnamed_cols:
+        df = df.drop(columns=unnamed_cols)
+        st.sidebar.warning(f"Dropped unnamed columns: {unnamed_cols}")
 
     # Display initial information
     st.sidebar.write("## Data Preprocessing")
@@ -165,7 +174,7 @@ def eda_section(df):
 
 def bar_chart(df):
     """
-    Creates a bar chart based on user-selected X and Y variables.
+    Creates a bar chart based on user-selected X and Y variables with an optional third variable as a filter.
 
     Parameters:
     - df (pd.DataFrame): The survey DataFrame.
@@ -177,15 +186,39 @@ def bar_chart(df):
     categorical_cols = [col for col in categorical_cols if col != 'ID']  # Exclude 'ID' from categorical variables
 
     # User selections
-    x_var = st.selectbox("Select X-axis Variable", categorical_cols)
-    y_var = st.selectbox("Select Y-axis Variable", categorical_cols)
+    x_var = st.selectbox("Select X-axis Variable", categorical_cols, key='bar_x')
+    y_var = st.selectbox("Select Y-axis Variable", categorical_cols, key='bar_y')
+
+    # Select a third variable for filtering
+    filter_var = st.selectbox("Select a Variable to Filter By (Optional)", ["None"] + categorical_cols, key='bar_filter_var')
+
+    if filter_var != "None":
+        filter_values = df[filter_var].unique().tolist()
+        selected_filter = st.selectbox(f"Select a Value for '{filter_var}' to Filter By", filter_values, key='bar_filter_value')
+        filtered_df = df[df[filter_var] == selected_filter]
+    else:
+        filtered_df = df
 
     if x_var and y_var:
         fig, ax = plt.subplots(figsize=(10,6))
-        sns.countplot(data=df, x=x_var, hue=y_var, ax=ax)
+        sns.countplot(data=filtered_df, x=x_var, hue=y_var, ax=ax)
         plt.xticks(rotation=45)
         plt.title(f"Count of {y_var} by {x_var}")
+        plt.tight_layout()
         st.pyplot(fig)
+
+        # Convert plot to bytes for download
+        buf = io.BytesIO()
+        fig.savefig(buf, format="png")
+        buf.seek(0)
+
+        # Download button
+        st.download_button(
+            label="Download Bar Chart as PNG",
+            data=buf,
+            file_name="bar_chart.png",
+            mime="image/png"
+        )
 
 def histogram(df):
     """
@@ -200,13 +233,27 @@ def histogram(df):
     numerical_cols = df.select_dtypes(include=['int64', 'float64']).columns.tolist()
 
     # User selection
-    var = st.selectbox("Select Variable for Histogram", numerical_cols)
+    var = st.selectbox("Select Variable for Histogram", numerical_cols, key='hist_var')
 
     if var:
         fig, ax = plt.subplots(figsize=(10,6))
         sns.histplot(df[var], kde=True, ax=ax, bins=30, color='skyblue')
         plt.title(f"Distribution of {var}")
+        plt.tight_layout()
         st.pyplot(fig)
+
+        # Convert plot to bytes for download
+        buf = io.BytesIO()
+        fig.savefig(buf, format="png")
+        buf.seek(0)
+
+        # Download button
+        st.download_button(
+            label="Download Histogram as PNG",
+            data=buf,
+            file_name="histogram.png",
+            mime="image/png"
+        )
 
 def box_plot(df):
     """
@@ -223,15 +270,29 @@ def box_plot(df):
     categorical_cols = [col for col in categorical_cols if col != 'ID']  # Exclude 'ID' from categorical variables
 
     # User selections
-    var = st.selectbox("Select Numerical Variable", numerical_cols)
-    group = st.selectbox("Select Grouping Variable", categorical_cols)
+    var = st.selectbox("Select Numerical Variable", numerical_cols, key='box_num_var')
+    group = st.selectbox("Select Grouping Variable", categorical_cols, key='box_group_var')
 
     if var and group:
         fig, ax = plt.subplots(figsize=(10,6))
         sns.boxplot(data=df, x=group, y=var, ax=ax)
         plt.xticks(rotation=45)
         plt.title(f"{var} by {group}")
+        plt.tight_layout()
         st.pyplot(fig)
+
+        # Convert plot to bytes for download
+        buf = io.BytesIO()
+        fig.savefig(buf, format="png")
+        buf.seek(0)
+
+        # Download button
+        st.download_button(
+            label="Download Box Plot as PNG",
+            data=buf,
+            file_name="box_plot.png",
+            mime="image/png"
+        )
 
 def correlation_matrix(df):
     """
@@ -250,7 +311,21 @@ def correlation_matrix(df):
         fig, ax = plt.subplots(figsize=(12,10))
         sns.heatmap(corr, annot=True, cmap='coolwarm', fmt=".2f", ax=ax)
         plt.title("Correlation Matrix of Numerical Variables")
+        plt.tight_layout()
         st.pyplot(fig)
+
+        # Convert plot to bytes for download
+        buf = io.BytesIO()
+        fig.savefig(buf, format="png")
+        buf.seek(0)
+
+        # Download button
+        st.download_button(
+            label="Download Correlation Matrix as PNG",
+            data=buf,
+            file_name="correlation_matrix.png",
+            mime="image/png"
+        )
     else:
         st.write("No numerical variables available for correlation matrix.")
 
@@ -350,7 +425,21 @@ def regression_section(df):
     ax_cm.set_xlabel('Predicted')
     ax_cm.set_ylabel('Actual')
     ax_cm.set_title('Confusion Matrix')
+    plt.tight_layout()
     st.pyplot(fig_cm)
+
+    # Convert confusion matrix plot to bytes for download
+    buf_cm = io.BytesIO()
+    fig_cm.savefig(buf_cm, format="png")
+    buf_cm.seek(0)
+
+    # Download button for confusion matrix
+    st.download_button(
+        label="Download Confusion Matrix as PNG",
+        data=buf_cm,
+        file_name="confusion_matrix.png",
+        mime="image/png"
+    )
 
     st.write("**Classification Report:**")
     report = classification_report(y_test, y_pred, target_names=['Negative', 'Positive'], output_dict=True)
@@ -368,7 +457,21 @@ def regression_section(df):
     ax_roc.set_ylabel('True Positive Rate')
     ax_roc.set_title('Receiver Operating Characteristic (ROC) Curve')
     ax_roc.legend(loc='lower right')
+    plt.tight_layout()
     st.pyplot(fig_roc)
+
+    # Convert ROC curve plot to bytes for download
+    buf_roc = io.BytesIO()
+    fig_roc.savefig(buf_roc, format="png")
+    buf_roc.seek(0)
+
+    # Download button for ROC curve
+    st.download_button(
+        label="Download ROC Curve as PNG",
+        data=buf_roc,
+        file_name="roc_curve.png",
+        mime="image/png"
+    )
 
     # Display model coefficients
     st.subheader("Model Coefficients")
@@ -418,7 +521,21 @@ def regression_section(df):
             ax_cm_c.set_xlabel('Predicted')
             ax_cm_c.set_ylabel('Actual')
             ax_cm_c.set_title('Confusion Matrix (Custom Model)')
+            plt.tight_layout()
             st.pyplot(fig_cm_c)
+
+            # Convert custom confusion matrix plot to bytes for download
+            buf_cm_c = io.BytesIO()
+            fig_cm_c.savefig(buf_cm_c, format="png")
+            buf_cm_c.seek(0)
+
+            # Download button for custom confusion matrix
+            st.download_button(
+                label="Download Custom Confusion Matrix as PNG",
+                data=buf_cm_c,
+                file_name="custom_confusion_matrix.png",
+                mime="image/png"
+            )
 
             st.write("**Classification Report:**")
             report_c = classification_report(y_test_c, y_pred_c, target_names=['Negative', 'Positive'], output_dict=True)
@@ -436,7 +553,21 @@ def regression_section(df):
             ax_roc_c.set_ylabel('True Positive Rate')
             ax_roc_c.set_title('Receiver Operating Characteristic (ROC) Curve (Custom Model)')
             ax_roc_c.legend(loc='lower right')
+            plt.tight_layout()
             st.pyplot(fig_roc_c)
+
+            # Convert custom ROC curve plot to bytes for download
+            buf_roc_c = io.BytesIO()
+            fig_roc_c.savefig(buf_roc_c, format="png")
+            buf_roc_c.seek(0)
+
+            # Download button for custom ROC curve
+            st.download_button(
+                label="Download Custom ROC Curve as PNG",
+                data=buf_roc_c,
+                file_name="custom_roc_curve.png",
+                mime="image/png"
+            )
 
             # Model coefficients
             st.write("**Model Coefficients:**")
@@ -450,6 +581,24 @@ def regression_section(df):
             # Additional Debugging Information
             st.write("**Custom Model Data Types:**")
             st.write(X_custom.dtypes)
+
+# -------------------------- Plot Download Function -------------------------- #
+
+def download_plot(fig, filename):
+    """
+    Converts a matplotlib figure to bytes and provides a download button.
+
+    Parameters:
+    - fig (matplotlib.figure.Figure): The figure to convert.
+    - filename (str): The desired filename for the download.
+
+    Returns:
+    - BytesIO: The bytes buffer containing the image data.
+    """
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png")
+    buf.seek(0)
+    return buf
 
 # -------------------------- Streamlit Run -------------------------- #
 
